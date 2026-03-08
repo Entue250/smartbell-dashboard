@@ -1,0 +1,19 @@
+smartbell-dashboard/
+├── .env.local          # Environment variables (e.g., RPi API URL)
+├── next.config.js      # Next.js configuration
+├── tailwind.config.js  # TailwindCSS configuration
+├── src/
+│   ├── app/
+│   │   ├── layout.jsx  # Root layout, wraps AuthProvider
+│   │   ├── page.jsx    # Main dashboard page
+│   │   └── login/
+│   │       └── page.jsx # Login page
+│   ├── components/
+│   │   ├── ScheduleTable.jsx # Schedule list + add/edit/delete
+│   │   ├── RingLogs.jsx      # Bell history log table
+│   │   ├── ManualRing.jsx    # Quick ring buttons
+│   │   └── UserManager.jsx   # Admin: manage users + roles
+│   └── lib/
+│       ├── api.js   # Axios instance + auth interceptors
+│       └── auth.js  # AuthContext + login/logout
+└── README.md         # Project overview & setup instructions
