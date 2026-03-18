@@ -1,10 +1,10 @@
+// src/lib/auth.js
 'use client';
 import { createContext, useContext, useState, useEffect } from 'react';
 import Cookies from 'js-cookie';
-import { jwtDecode } from 'jwt-decode';
 import API from './api';
 
-const AuthContext = createContext({});
+const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -12,22 +12,30 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const token = Cookies.get('token');
-    if (token) {
-      try { setUser(jwtDecode(token)); }
-      catch { Cookies.remove('token'); }
+    const username = Cookies.get('username');
+    const role = Cookies.get('role');
+    if (token && username && role) {
+      setUser({ username, role });
     }
     setLoading(false);
   }, []);
 
   const login = async (username, password) => {
     const { data } = await API.post('/api/auth/login', { username, password });
-    Cookies.set('token', data.token, { expires: 7 });
+    Cookies.set('token', data.token, { expires: 1 / 24 });
+    Cookies.set('refresh_token', data.refresh_token, { expires: 30 });
+    Cookies.set('username', data.username, { expires: 30 });
+    Cookies.set('role', data.role, { expires: 30 });
     setUser({ username: data.username, role: data.role });
-    return data;
+    // Hard redirect — triggers middleware which sees the cookie and allows /
+    window.location.href = '/';
   };
 
   const logout = () => {
     Cookies.remove('token');
+    Cookies.remove('refresh_token');
+    Cookies.remove('username');
+    Cookies.remove('role');
     setUser(null);
     window.location.href = '/login';
   };
@@ -39,4 +47,8 @@ export function AuthProvider({ children }) {
   );
 }
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
+  return ctx;
+}
