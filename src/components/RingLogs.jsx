@@ -1,55 +1,106 @@
 'use client';
 // src/components/RingLogs.jsx
+import { PatternBadge } from './PatternSelect';
+
+const SIT_ICONS = {
+  CLASS: '📚', BREAK: '☕', LUNCH: '🍽️', EXAM: '📝', EMERGENCY: '🚨',
+  WARNING: '⚠️', ASSEMBLY: '🎤', HOLIDAY: '🎉', CUSTOM: '✏️',
+};
+
+const TRIGGER_STYLE = {
+  schedule: { bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.25)', color: '#93c5fd', label: 'auto' },
+  manual: { bg: 'rgba(234,179,8,0.1)', border: 'rgba(234,179,8,0.25)', color: '#fde047', label: 'manual' },
+  manual_stop: { bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.2)', color: '#fca5a5', label: 'stopped' },
+};
+
 export default function RingLogs({ logs = [], showAll = false }) {
-  const fmt = (ts) => {
-    if (!ts) return '--';
-    const d = new Date(ts);
-    return d.toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: 'short' });
-  };
+  const display = showAll ? logs : logs.slice(0, 10);
+
+  if (display.length === 0) return (
+    <div style={{
+      textAlign: 'center', padding: '48px 20px',
+      color: 'rgba(255,255,255,0.2)', fontSize: '14px',
+    }}>
+      <div style={{ fontSize: '36px', marginBottom: '12px', opacity: 0.3 }}>🔔</div>
+      No bell rings logged yet.
+    </div>
+  );
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-        <h3 className="font-semibold text-white text-sm">
-          {showAll ? 'Bell History' : 'Recent Rings'}
-        </h3>
-        <span className="text-xs text-gray-500 font-mono">{logs.length} entries</span>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-xs text-gray-400 uppercase tracking-wider border-b border-gray-800">
-              <th className="text-left px-4 py-2.5">Time</th>
-              <th className="text-left px-4 py-2.5">Period</th>
-              <th className="text-left px-4 py-2.5">Triggered By</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.length === 0 && (
-              <tr>
-                <td colSpan={3} className="text-center text-gray-500 py-8 text-sm">
-                  No bell rings recorded yet.
-                </td>
-              </tr>
-            )}
-            {logs.map((l, i) => (
-              <tr key={l.id ?? i} className="border-b border-gray-800/60 hover:bg-gray-800/30 transition">
-                <td className="px-4 py-2.5 font-mono text-xs text-gray-300">{fmt(l.rang_at)}</td>
-                <td className="px-4 py-2.5 text-white font-medium">{l.schedule_name || 'Manual Ring'}</td>
-                <td className="px-4 py-2.5">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                    l.triggered_by === 'manual'
-                      ? 'bg-amber-900/40 text-amber-400'
-                      : 'bg-blue-900/40 text-blue-400'
-                  }`}>
-                    {l.triggered_by === 'manual' ? '⚡ Manual' : '🕐 Schedule'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {display.map((l) => {
+        const triggerKey = l.triggered_by === 'manual_stop' ? 'manual_stop'
+          : l.triggered_by !== 'schedule' ? 'manual' : 'schedule';
+        const style = TRIGGER_STYLE[triggerKey] || TRIGGER_STYLE.schedule;
+        const ts = l.rang_at
+          ? new Date(l.rang_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+          : '';
+        const dateStr = l.rang_at
+          ? new Date(l.rang_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+          : '';
+        const sitIcon = SIT_ICONS[l.situation_type] || '🔔';
+
+        return (
+          <div key={l.id} style={{
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: '12px',
+            padding: '10px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            transition: 'border-color 0.15s',
+          }}
+            onMouseOver={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'}
+            onMouseOut={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'}
+          >
+            {/* Situation icon */}
+            <div style={{
+              width: '32px', height: '32px', borderRadius: '8px', flexShrink: 0,
+              background: 'rgba(255,255,255,0.05)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '15px',
+            }}>{sitIcon}</div>
+
+            {/* Name + pattern */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontWeight: 700, color: '#f1f5f9', fontSize: '13px', marginBottom: '3px',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+              }}>
+                {l.schedule_name || 'Ring'}
+              </div>
+              {l.pattern && <PatternBadge value={l.pattern} />}
+            </div>
+
+            {/* Timestamp */}
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>
+                {ts}
+              </div>
+              <div style={{ fontFamily: 'monospace', fontSize: '10px', color: 'rgba(255,255,255,0.2)' }}>
+                {dateStr}
+              </div>
+            </div>
+
+            {/* Trigger badge */}
+            <div style={{
+              flexShrink: 0,
+              background: style.bg,
+              border: `1px solid ${style.border}`,
+              color: style.color,
+              fontSize: '10px',
+              fontFamily: 'monospace',
+              fontWeight: 700,
+              letterSpacing: '0.5px',
+              padding: '3px 8px',
+              borderRadius: '20px',
+            }}>
+              {style.label}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
