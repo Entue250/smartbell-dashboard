@@ -2,112 +2,218 @@
 // src/components/ManualRing.jsx
 import { useState } from 'react';
 import API from '@/lib/api';
-import { Bell, AlertTriangle, Coffee } from 'lucide-react';
+import PatternSelect from './PatternSelect';
+import LCDPreview from './LCDPreview';
 
-const QUICK_RINGS = [
-  { label: 'Ring Class',  pattern: 'LONG_SHORT',   led: 'GREEN',  lcd1: 'CLASS START', lcd2: 'MANUAL', icon: <Bell size={16}/>,         color: 'green' },
-  { label: 'Ring Break',  pattern: 'TRIPLE_SHORT',  led: 'YELLOW', lcd1: 'BREAK TIME',  lcd2: 'MANUAL', icon: <Coffee size={16}/>,        color: 'yellow' },
-  { label: 'Emergency',   pattern: 'EMERGENCY',     led: 'RED',    lcd1: 'EMERGENCY!',  lcd2: 'ALERT',  icon: <AlertTriangle size={16}/>, color: 'red' },
+const LED_OPTIONS = [
+  { value: 'GREEN', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.35)' },
+  { value: 'YELLOW', color: '#eab308', bg: 'rgba(234,179,8,0.12)', border: 'rgba(234,179,8,0.35)' },
+  { value: 'RED', color: '#ef4444', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.35)' },
 ];
 
-const colorMap = {
-  green:  { btn: 'border-green-700 hover:bg-green-900/30 text-green-400 hover:border-green-500', badge: 'bg-green-900/30' },
-  yellow: { btn: 'border-yellow-700 hover:bg-yellow-900/30 text-yellow-400 hover:border-yellow-500', badge: 'bg-yellow-900/30' },
-  red:    { btn: 'border-red-700 hover:bg-red-900/30 text-red-400 hover:border-red-500', badge: 'bg-red-900/30' },
-};
+const Section = ({ title, children }) => (
+  <div style={{
+    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+    borderRadius: '16px', padding: '20px',
+    display: 'flex', flexDirection: 'column', gap: '16px',
+  }}>{title && (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <h3 style={{ color: '#f1f5f9', fontSize: '14px', fontWeight: 700, margin: 0 }}>{title}</h3>
+    </div>
+  )}{children}</div>
+);
 
-export default function ManualRing({ onRing }) {
-  const [ringing, setRinging] = useState(null);
-  const [lastRung, setLastRung] = useState(null);
-  const [custom, setCustom]   = useState({ name: '', pattern: 'LONG_SHORT', led: 'GREEN', lcd1: '', lcd2: '' });
-  const [showCustom, setShowCustom] = useState(false);
+export default function ManualRing({ onRing, bellActive, onBellActiveChange }) {
+  const [form, setForm] = useState({
+    name: 'MANUAL RING', pattern: 'LONG_SHORT',
+    led_color: 'GREEN', lcd_line1: 'MANUAL RING', lcd_line2: '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [lcdLine1, setLcdLine1] = useState('');
+  const [lcdLine2, setLcdLine2] = useState('');
+  const [overrideStatus, setOverrideStatus] = useState(null);
 
-  const doRing = async (r) => {
-    setRinging(r.label);
+  const ring = async () => {
+    setLoading(true);
     try {
-      await API.post('/api/ring-now', {
-        name:      r.label,
-        pattern:   r.pattern,
-        led_color: r.led,
-        lcd_line1: r.lcd1,
-        lcd_line2: r.lcd2,
-      });
-      setLastRung(r.label);
-      setTimeout(() => setLastRung(null), 3000);
-      onRing?.();
-    } catch {
-      alert('Ring failed — check Arduino connection');
-    } finally {
-      setRinging(null);
-    }
+      await API.post('/api/ring-now', form);
+      if (onRing) onRing();
+    } catch (e) { alert(e.response?.data?.error || 'Ring failed'); }
+    finally { setLoading(false); }
   };
 
-  const doCustomRing = async (e) => {
-    e.preventDefault();
-    await doRing({
-      label:   custom.name || 'Custom Ring',
-      pattern: custom.pattern,
-      led:     custom.led,
-      lcd1:    custom.lcd1 || 'CUSTOM RING',
-      lcd2:    custom.lcd2,
-    });
+  const silence = async () => {
+    setStopping(true);
+    try {
+      await API.post('/api/ring-stop');
+      if (onBellActiveChange) onBellActiveChange(false);
+    } catch (e) { alert(e.response?.data?.error || 'Silence failed'); }
+    finally { setStopping(false); }
+  };
+
+  const pushLCD = async () => {
+    if (!lcdLine1.trim()) return;
+    try {
+      await API.post('/api/lcd-override', { line1: lcdLine1, line2: lcdLine2 });
+      setOverrideStatus('pushed');
+      setTimeout(() => setOverrideStatus(null), 2000);
+    } catch { setOverrideStatus('error'); }
+  };
+
+  const clearLCD = async () => {
+    try {
+      await API.delete('/api/lcd-override');
+      setLcdLine1(''); setLcdLine2('');
+      setOverrideStatus('cleared');
+      setTimeout(() => setOverrideStatus(null), 2000);
+    } catch { }
+  };
+
+  const inputStyle = {
+    width: '100%', boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '8px', padding: '9px 12px',
+    color: '#f1f5f9', fontSize: '13px', fontFamily: 'monospace', outline: 'none',
+    transition: 'border-color 0.2s',
   };
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-      <h3 className="font-semibold text-white mb-4 text-sm">Quick Manual Ring</h3>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontFamily: 'inherit' }}>
 
-      {lastRung && (
-        <div className="mb-4 bg-yellow-900/30 border border-yellow-700 rounded-lg px-4 py-2 text-yellow-400 text-sm font-medium animate-pulse">
-          🔔 {lastRung} — Bell rung successfully!
+      {/* Manual ring */}
+      <Section title="🔔 Manual Ring">
+        <PatternSelect value={form.pattern} onChange={v => setForm(f => ({ ...f, pattern: v }))} />
+
+        {/* LED selector */}
+        <div>
+          <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.45)', fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '7px' }}>
+            LED Color
+          </label>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {LED_OPTIONS.map(opt => (
+              <button key={opt.value} onClick={() => setForm(f => ({ ...f, led_color: opt.value }))}
+                style={{
+                  flex: 1, padding: '8px 0', borderRadius: '8px', fontSize: '11px', fontWeight: 700,
+                  fontFamily: 'inherit', cursor: 'pointer', transition: 'all 0.15s',
+                  background: form.led_color === opt.value ? opt.bg : 'rgba(255,255,255,0.04)',
+                  border: form.led_color === opt.value ? `1px solid ${opt.border}` : '1px solid rgba(255,255,255,0.08)',
+                  color: form.led_color === opt.value ? opt.color : 'rgba(255,255,255,0.3)',
+                }}>
+                {opt.value}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-        {QUICK_RINGS.map(r => (
-          <button
-            key={r.label}
-            onClick={() => doRing(r)}
-            disabled={!!ringing}
-            className={`flex items-center gap-3 border rounded-xl px-4 py-3 font-semibold text-sm transition disabled:opacity-50 disabled:cursor-not-allowed ${colorMap[r.color].btn}`}
-          >
-            {ringing === r.label ? (
-              <span className="animate-spin">⏳</span>
-            ) : r.icon}
-            {ringing === r.label ? 'Ringing...' : r.label}
+        {/* LCD lines */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginBottom: '5px' }}>
+              Line 1 ({16 - (form.lcd_line1?.length || 0)} left)
+            </label>
+            <input value={form.lcd_line1} maxLength={16}
+              onChange={e => setForm(f => ({ ...f, lcd_line1: e.target.value }))}
+              style={inputStyle} placeholder="LCD line 1"
+              onFocus={e => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
+              onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginBottom: '5px' }}>
+              Line 2 ({16 - (form.lcd_line2?.length || 0)} left)
+            </label>
+            <input value={form.lcd_line2} maxLength={16}
+              onChange={e => setForm(f => ({ ...f, lcd_line2: e.target.value }))}
+              style={inputStyle} placeholder="LCD line 2"
+              onFocus={e => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
+              onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+            />
+          </div>
+        </div>
+
+        <LCDPreview label="Preview" line1={form.lcd_line1} line2={form.lcd_line2} />
+
+        {/* Buttons */}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={ring} disabled={loading} style={{
+            flex: 1, padding: '11px', borderRadius: '10px', fontSize: '13px', fontWeight: 700,
+            fontFamily: 'inherit', cursor: loading ? 'not-allowed' : 'pointer',
+            background: loading ? 'rgba(234,179,8,0.4)' : 'rgba(234,179,8,0.9)',
+            border: 'none', color: '#1a1000',
+            boxShadow: loading ? 'none' : '0 4px 14px rgba(234,179,8,0.3)',
+            transition: 'all 0.2s',
+          }}>
+            {loading ? '⏳ Ringing...' : '🔔 Ring Now'}
           </button>
-        ))}
-      </div>
-
-      <button
-        onClick={() => setShowCustom(v => !v)}
-        className="text-xs text-gray-500 hover:text-gray-300 transition underline"
-      >
-        {showCustom ? 'Hide' : 'Custom ring options'}
-      </button>
-
-      {showCustom && (
-        <form onSubmit={doCustomRing} className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-3">
-          <input value={custom.name} onChange={e => setCustom({...custom, name: e.target.value})}
-            placeholder="Name (e.g. Assembly)"
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
-          <input value={custom.lcd1} onChange={e => setCustom({...custom, lcd1: e.target.value.slice(0,16)})}
-            placeholder="LCD line 1"
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-blue-500" />
-          <select value={custom.pattern} onChange={e => setCustom({...custom, pattern: e.target.value})}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
-            <option>LONG_SHORT</option><option>TRIPLE_SHORT</option><option>TRIPLE_LONG</option><option>EMERGENCY</option>
-          </select>
-          <select value={custom.led} onChange={e => setCustom({...custom, led: e.target.value})}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
-            <option>GREEN</option><option>YELLOW</option><option>RED</option>
-          </select>
-          <button type="submit" disabled={!!ringing}
-            className="col-span-2 md:col-span-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg px-4 py-2 transition">
-            {ringing ? 'Ringing...' : '🔔 Ring Custom'}
+          <button onClick={silence} disabled={stopping || !bellActive} style={{
+            padding: '11px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: 700,
+            fontFamily: 'inherit', cursor: (!bellActive || stopping) ? 'not-allowed' : 'pointer',
+            background: 'transparent',
+            border: bellActive ? '1px solid rgba(239,68,68,0.4)' : '1px solid rgba(255,255,255,0.08)',
+            color: bellActive ? '#f87171' : 'rgba(255,255,255,0.2)',
+            transition: 'all 0.2s',
+          }}>
+            {stopping ? '...' : '⬛ Silence'}
           </button>
-        </form>
-      )}
+        </div>
+        {!bellActive && (
+          <p style={{ textAlign: 'center', fontSize: '11px', color: 'rgba(255,255,255,0.2)', margin: 0 }}>
+            Silence button activates for 30s after a bell rings
+          </p>
+        )}
+      </Section>
+
+      {/* LCD Override */}
+      <Section title="📺 LCD Override">
+        <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)', margin: 0 }}>
+          Push custom text to the LCD immediately, overriding the situation engine.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginBottom: '5px' }}>
+              Line 1 ({16 - (lcdLine1?.length || 0)} left)
+            </label>
+            <input value={lcdLine1} maxLength={16} onChange={e => setLcdLine1(e.target.value)}
+              style={inputStyle} placeholder="Custom line 1"
+              onFocus={e => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
+              onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginBottom: '5px' }}>
+              Line 2 ({16 - (lcdLine2?.length || 0)} left)
+            </label>
+            <input value={lcdLine2} maxLength={16} onChange={e => setLcdLine2(e.target.value)}
+              style={inputStyle} placeholder="Custom line 2"
+              onFocus={e => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
+              onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+            />
+          </div>
+        </div>
+        <LCDPreview label="Preview" line1={lcdLine1} line2={lcdLine2} />
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={pushLCD} style={{
+            flex: 1, padding: '10px', borderRadius: '10px', fontSize: '12px', fontWeight: 700,
+            fontFamily: 'inherit', cursor: 'pointer', transition: 'all 0.2s',
+            background: overrideStatus === 'pushed' ? 'rgba(34,197,94,0.15)' : 'rgba(99,102,241,0.8)',
+            border: overrideStatus === 'pushed' ? '1px solid rgba(34,197,94,0.3)' : 'none',
+            color: overrideStatus === 'pushed' ? '#4ade80' : 'white',
+            boxShadow: overrideStatus !== 'pushed' ? '0 4px 12px rgba(99,102,241,0.25)' : 'none',
+          }}>
+            {overrideStatus === 'pushed' ? '✓ Pushed to LCD!' : '📺 Push to LCD'}
+          </button>
+          <button onClick={clearLCD} style={{
+            padding: '10px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: 600,
+            fontFamily: 'inherit', cursor: 'pointer',
+            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+            color: overrideStatus === 'cleared' ? '#4ade80' : 'rgba(255,255,255,0.4)',
+            transition: 'all 0.2s',
+          }}>
+            {overrideStatus === 'cleared' ? '✓ Cleared' : 'Clear'}
+          </button>
+        </div>
+      </Section>
     </div>
   );
 }
