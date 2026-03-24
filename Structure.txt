@@ -4,7 +4,7 @@ smartbell-dashboard/
 ├── tailwind.config.js  # TailwindCSS configuration
 ├── src/
 │   ├── app/
-│   │   ├── layout.jsx  # Root layout, wraps AuthProvider
+│   │   ├── layout.jsx  # Root layout, wraps AuthProviders
 │   │   ├── page.jsx    # Main dashboard page
 │   │   └── login/
 │   │       └── page.jsx # Login page
