@@ -3,177 +3,493 @@
 import { useState, useEffect, useCallback } from 'react';
 import API from '@/lib/api';
 import { PatternBadge } from './PatternSelect';
-import { Check, Bell, Clock, ChevronRight } from 'lucide-react';
 
-const LED_COLORS = { GREEN: 'bg-green-500', YELLOW: 'bg-yellow-400', RED: 'bg-red-500', OFF: 'bg-gray-600' };
-const SIT_COLORS = {
-    CLASS: 'text-blue-400', BREAK: 'text-yellow-400',
-    LUNCH: 'text-orange-400', EXAM: 'text-purple-400',
-    EMERGENCY: 'text-red-400', WARNING: 'text-orange-400',
-    ASSEMBLY: 'text-green-400', HOLIDAY: 'text-pink-400',
-    CUSTOM: 'text-gray-400',
-};
 const SIT_ICONS = {
-    CLASS: '📚', BREAK: '☕', LUNCH: '🍽️', EXAM: '📝', EMERGENCY: '🚨',
-    WARNING: '⚠️', ASSEMBLY: '🎤', HOLIDAY: '🎉', CUSTOM: '✏️',
+  CLASS: '📚',
+  BREAK: '☕',
+  LUNCH: '🍽️',
+  EXAM: '📝',
+  EMERGENCY: '🚨',
+  WARNING: '⚠️',
+  ASSEMBLY: '🎤',
+  HOLIDAY: '🎉',
+  CUSTOM: '✏️',
 };
+
+const SIT_COLOR = {
+  CLASS: { bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.3)', text: '#93c5fd' },
+  BREAK: { bg: 'rgba(234,179,8,0.12)', border: 'rgba(234,179,8,0.3)', text: '#fde047' },
+  LUNCH: { bg: 'rgba(249,115,22,0.12)', border: 'rgba(249,115,22,0.3)', text: '#fdba74' },
+  EXAM: { bg: 'rgba(168,85,247,0.12)', border: 'rgba(168,85,247,0.3)', text: '#d8b4fe' },
+  EMERGENCY: { bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.3)', text: '#fca5a5' },
+  WARNING: { bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)', text: '#fcd34d' },
+  ASSEMBLY: { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)', text: '#86efac' },
+  HOLIDAY: { bg: 'rgba(236,72,153,0.12)', border: 'rgba(236,72,153,0.3)', text: '#f9a8d4' },
+  CUSTOM: { bg: 'rgba(107,114,128,0.12)', border: 'rgba(107,114,128,0.3)', text: '#9ca3af' },
+};
+
+const LED_COLOR = { GREEN: '#22c55e', YELLOW: '#facc15', RED: '#ef4444', OFF: '#6b7280' };
 
 function useCountdown(targetTime) {
-    const [remaining, setRemaining] = useState('');
-    useEffect(() => {
-        if (!targetTime) return;
-        const tick = () => {
-            const now = new Date();
-            const [hh, mm] = targetTime.split(':').map(Number);
-            const target = new Date(now);
-            target.setHours(hh, mm, 0, 0);
-            const diff = target - now;
-            if (diff <= 0) { setRemaining('Now'); return; }
-            const m = Math.floor(diff / 60000);
-            const s = Math.floor((diff % 60000) / 1000);
-            setRemaining(`${m}m ${s.toString().padStart(2, '0')}s`);
-        };
-        tick();
-        const id = setInterval(tick, 1000);
-        return () => clearInterval(id);
-    }, [targetTime]);
-    return remaining;
+  const [remaining, setRemaining] = useState('');
+  useEffect(() => {
+    if (!targetTime) return;
+    const tick = () => {
+      const now = new Date();
+      const [hh, mm] = targetTime.split(':').map(Number);
+      const target = new Date(now);
+      target.setHours(hh, mm, 0, 0);
+      const diff = target - now;
+      if (diff <= 0) {
+        setRemaining('Now!');
+        return;
+      }
+      const m = Math.floor(diff / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setRemaining(`${m}m ${s.toString().padStart(2, '0')}s`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [targetTime]);
+  return remaining;
 }
 
 export default function TodayTimeline({ canEdit, onRing }) {
-    const [schedules, setSchedules] = useState([]);
-    const [logs, setLogs] = useState([]);
-    const [ringStates, setRingStates] = useState({});
+  const [schedules, setSchedules] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [ringStates, setRingStates] = useState({});
 
-    const load = useCallback(async () => {
-        try {
-            const [sc, lg] = await Promise.all([
-                API.get('/api/schedules'),
-                API.get('/api/logs?limit=100'),
-            ]);
-            const now = new Date();
-            const dow = ['S', 'M', 'T', 'W', 't', 'F', 's'][now.getDay()];
-            // Filter to today's schedules
-            setSchedules(sc.data.filter(s => s.active && (s.days_of_week || 'MTWTF').includes(dow)));
-            setLogs(lg.data);
-        } catch (e) { console.error(e); }
-    }, []);
+  const load = useCallback(async () => {
+    try {
+      const [sc, lg] = await Promise.all([
+        API.get('/api/schedules'),
+        API.get('/api/logs?limit=100'),
+      ]);
+      const now = new Date();
+      const dow = ['S', 'M', 'T', 'W', 't', 'F', 's'][now.getDay()];
+      setSchedules(sc.data.filter((s) => s.active && (s.days_of_week || 'MTWTF').includes(dow)));
+      setLogs(lg.data);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
 
-    useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-    const nowStr = new Date().toTimeString().slice(0, 5);
-    const nextSchedule = schedules.find(s => s.ring_time > nowStr);
-    const nextBellTime = nextSchedule?.ring_time;
-    const countdown = useCountdown(nextBellTime);
+  const nowStr = new Date().toTimeString().slice(0, 5);
+  const nextSchedule = schedules.find((s) => s.ring_time > nowStr);
+  const countdown = useCountdown(nextSchedule?.ring_time);
 
-    const hasRungToday = (name) => {
-        const today = new Date().toISOString().slice(0, 10);
-        return logs.some(l => l.schedule_name === name && l.rang_at?.startsWith(today));
-    };
+  const hasRungToday = (name) => {
+    const today = new Date().toISOString().slice(0, 10);
+    return logs.some((l) => l.schedule_name === name && l.rang_at?.startsWith(today));
+  };
 
-    const testBell = async (s) => {
-        setRingStates(r => ({ ...r, [s.id]: 'loading' }));
-        try {
-            await API.post('/api/ring-now', {
-                name: s.name, pattern: s.pattern,
-                led_color: s.led_color, lcd_line1: s.lcd_line1, lcd_line2: s.lcd_line2,
-            });
-            setRingStates(r => ({ ...r, [s.id]: 'done' }));
-            setTimeout(() => setRingStates(r => ({ ...r, [s.id]: null })), 2500);
-            if (onRing) onRing();
-        } catch { setRingStates(r => ({ ...r, [s.id]: null })); }
-    };
+  const testBell = async (s) => {
+    setRingStates((r) => ({ ...r, [s.id]: 'loading' }));
+    try {
+      await API.post('/api/ring-now', {
+        name: s.name,
+        pattern: s.pattern,
+        led_color: s.led_color,
+        lcd_line1: s.lcd_line1,
+        lcd_line2: s.lcd_line2,
+      });
+      setRingStates((r) => ({ ...r, [s.id]: 'done' }));
+      setTimeout(() => setRingStates((r) => ({ ...r, [s.id]: null })), 2500);
+      if (onRing) onRing();
+    } catch {
+      setRingStates((r) => ({ ...r, [s.id]: null }));
+    }
+  };
 
-    return (
-        <div className="space-y-4">
-            {/* Next bell countdown */}
-            {nextSchedule && (
-                <div className="bg-blue-900/20 border border-blue-800/40 rounded-xl px-5 py-4 flex items-center gap-4">
-                    <div className="text-3xl font-bold font-mono text-blue-300 animate-pulse">{countdown}</div>
-                    <div>
-                        <p className="text-xs text-gray-400 font-mono tracking-widest">NEXT BELL</p>
-                        <p className="text-white font-bold">{nextSchedule.name}</p>
-                        <p className="text-gray-400 text-sm font-mono">{nextSchedule.ring_time}</p>
-                    </div>
-                    <Clock size={20} className="text-blue-500 ml-auto" />
-                </div>
-            )}
+  const S = {
+    wrap: { display: 'flex', flexDirection: 'column', gap: '16px', fontFamily: 'inherit' },
+    // Countdown
+    cdCard: {
+      background: 'linear-gradient(135deg,rgba(79,70,229,0.18),rgba(49,46,129,0.10))',
+      border: '1px solid rgba(99,102,241,0.35)',
+      borderRadius: '18px',
+      padding: '18px 22px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '20px',
+      boxShadow: '0 4px 24px rgba(99,102,241,0.12)',
+    },
+    cdName: { fontSize: '17px', fontWeight: 800, color: '#e0e7ff', marginBottom: '2px' },
+    cdTime: { fontSize: '12px', color: 'rgba(165,180,252,0.5)', fontFamily: 'monospace' },
+    cdLabel: {
+      fontSize: '10px',
+      fontWeight: 700,
+      letterSpacing: '2px',
+      color: 'rgba(165,180,252,0.5)',
+      textTransform: 'uppercase',
+      marginBottom: '6px',
+    },
+    cdCount: {
+      fontSize: '32px',
+      fontWeight: 800,
+      color: '#a5b4fc',
+      fontFamily: 'monospace',
+      letterSpacing: '-1px',
+      lineHeight: 1,
+    },
+    cdSub: {
+      fontSize: '9px',
+      color: 'rgba(165,180,252,0.35)',
+      letterSpacing: '2px',
+      marginTop: '4px',
+      textTransform: 'uppercase',
+    },
+    // Section header
+    secHead: { display: 'flex', alignItems: 'center', gap: '10px' },
+    secLine: { flex: 1, height: '1px', background: 'rgba(255,255,255,0.07)' },
+    secTxt: {
+      fontSize: '10px',
+      fontWeight: 700,
+      letterSpacing: '2px',
+      color: 'rgba(255,255,255,0.25)',
+      textTransform: 'uppercase',
+    },
+    // Empty
+    empty: { textAlign: 'center', padding: '56px 20px' },
+  };
 
-            {/* Timeline */}
-            <div className="relative">
-                {/* Vertical line */}
-                <div className="absolute left-[28px] top-0 bottom-0 w-px bg-gray-800" />
-
-                <div className="space-y-2">
-                    {schedules.length === 0 && (
-                        <div className="text-center py-10 text-gray-500">
-                            <Bell size={32} className="mx-auto mb-2 opacity-30" />
-                            <p>No bells scheduled for today</p>
-                        </div>
-                    )}
-                    {schedules.map((s) => {
-                        const rung = hasRungToday(s.name);
-                        const isNext = s.id === nextSchedule?.id;
-                        const isPast = s.ring_time < nowStr;
-                        const rs = ringStates[s.id];
-                        return (
-                            <div key={s.id}
-                                className={`relative flex items-start gap-4 pl-14 pr-4 py-3 rounded-xl transition
-                  ${isNext ? 'bg-blue-900/20 border border-blue-800/40' :
-                                        rung ? 'bg-gray-900/50 border border-gray-800/50 opacity-60' :
-                                            'bg-gray-900 border border-gray-800'}
-                `}
-                            >
-                                {/* Dot on timeline */}
-                                <div className={`absolute left-5 top-4 w-6 h-6 rounded-full border-2 flex items-center justify-center z-10
-                  ${rung ? 'bg-green-800 border-green-600' :
-                                        isNext ? 'bg-blue-700 border-blue-400 animate-pulse' :
-                                            'bg-gray-800 border-gray-600'}
-                `}>
-                                    {rung ? <Check size={11} className="text-green-300" />
-                                        : isNext ? <Bell size={10} className="text-blue-300" />
-                                            : <div className={`w-2 h-2 rounded-full ${LED_COLORS[s.led_color] || 'bg-gray-500'}`} />}
-                                </div>
-
-                                {/* Time */}
-                                <div className="w-12 flex-shrink-0">
-                                    <span className={`font-mono text-sm font-bold ${isNext ? 'text-blue-300' : rung ? 'text-gray-500' : 'text-white'}`}>
-                                        {s.ring_time}
-                                    </span>
-                                </div>
-
-                                {/* Content */}
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-bold text-sm text-white truncate">{s.name}</span>
-                                        <span className={`text-xs ${SIT_COLORS[s.situation_type] || 'text-gray-400'}`}>
-                                            {SIT_ICONS[s.situation_type]} {s.situation_type}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                        <PatternBadge value={s.pattern} />
-                                        <span className="font-mono text-xs text-gray-500">{s.lcd_line1}</span>
-                                    </div>
-                                </div>
-
-                                {/* Test button */}
-                                {canEdit && (
-                                    <button
-                                        onClick={() => testBell(s)}
-                                        disabled={!!rs}
-                                        className={`flex-shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg border transition
-                      ${rs === 'done' ? 'border-green-700 text-green-400 bg-green-900/20'
-                                                : rs === 'loading' ? 'border-gray-700 text-gray-500 cursor-wait'
-                                                    : 'border-gray-700 text-gray-400 hover:border-blue-600 hover:text-blue-400'}`}
-                                    >
-                                        {rs === 'done' ? '✓ Done' : rs === 'loading' ? '...' : <><Bell size={11} /> Test</>}
-                                    </button>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
+  return (
+    <div style={S.wrap}>
+      {/* ── Countdown / done card ───────────────────────────── */}
+      {nextSchedule ? (
+        <div style={S.cdCard}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={S.cdLabel}>Next Bell</p>
+            <p style={S.cdName}>{nextSchedule.name}</p>
+            <p style={S.cdTime}>{nextSchedule.ring_time}</p>
+          </div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={S.cdCount}>{countdown}</div>
+            <div style={S.cdSub}>remaining</div>
+          </div>
+          <div style={{ fontSize: '26px', flexShrink: 0 }}>⏰</div>
         </div>
-    );
+      ) : (
+        <div
+          style={{
+            background: 'rgba(34,197,94,0.07)',
+            border: '1px solid rgba(34,197,94,0.22)',
+            borderRadius: '16px',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+          }}
+        >
+          <span style={{ fontSize: '24px' }}>✅</span>
+          <div>
+            <p style={{ fontSize: '15px', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
+              All bells done for today
+            </p>
+            <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)', margin: '2px 0 0' }}>
+              See you tomorrow!
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Section header ──────────────────────────────────── */}
+      <div style={S.secHead}>
+        <span style={S.secTxt}>Today's Schedule</span>
+        <div style={S.secLine} />
+        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)', fontFamily: 'monospace' }}>
+          {schedules.length} bells
+        </span>
+      </div>
+
+      {/* ── Empty state ─────────────────────────────────────── */}
+      {schedules.length === 0 && (
+        <div style={S.empty}>
+          <div style={{ fontSize: '36px', marginBottom: '12px', opacity: 0.25 }}>🔔</div>
+          <p
+            style={{ fontSize: '14px', fontWeight: 600, color: 'rgba(255,255,255,0.3)', margin: 0 }}
+          >
+            No bells scheduled for today
+          </p>
+          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.15)', marginTop: '6px' }}>
+            Check the Schedules tab to add bells
+          </p>
+        </div>
+      )}
+
+      {/* ── Timeline ────────────────────────────────────────── */}
+      {schedules.length > 0 && (
+        <div style={{ position: 'relative' }}>
+          {/* Vertical connector line */}
+          <div
+            style={{
+              position: 'absolute',
+              left: '19px',
+              top: '14px',
+              bottom: '14px',
+              width: '1px',
+              background:
+                'linear-gradient(to bottom, rgba(99,102,241,0.5) 0%, rgba(99,102,241,0.08) 100%)',
+            }}
+          />
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {schedules.map((s) => {
+              const rung = hasRungToday(s.name);
+              const isNext = s.id === nextSchedule?.id;
+              const rs = ringStates[s.id];
+              const sit = SIT_COLOR[s.situation_type] || SIT_COLOR.CUSTOM;
+              const led = LED_COLOR[s.led_color] || '#6b7280';
+
+              return (
+                <div
+                  key={s.id}
+                  style={{
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    paddingLeft: '44px',
+                    paddingRight: '12px',
+                    paddingTop: '11px',
+                    paddingBottom: '11px',
+                    borderRadius: '14px',
+                    border: isNext
+                      ? '1px solid rgba(99,102,241,0.45)'
+                      : rung
+                        ? '1px solid rgba(255,255,255,0.05)'
+                        : '1px solid rgba(255,255,255,0.08)',
+                    background: isNext
+                      ? 'rgba(79,70,229,0.13)'
+                      : rung
+                        ? 'rgba(255,255,255,0.02)'
+                        : 'rgba(255,255,255,0.035)',
+                    opacity: rung ? 0.55 : 1,
+                    transition: 'border-color 0.2s, background 0.2s',
+                  }}
+                >
+                  {/* Dot on the vertical line */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '9px',
+                      width: '22px',
+                      height: '22px',
+                      borderRadius: '50%',
+                      zIndex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '10px',
+                      background: rung
+                        ? 'rgba(34,197,94,0.18)'
+                        : isNext
+                          ? 'rgba(99,102,241,0.28)'
+                          : 'rgba(255,255,255,0.06)',
+                      border: rung
+                        ? '2px solid rgba(34,197,94,0.7)'
+                        : isNext
+                          ? '2px solid rgba(99,102,241,0.8)'
+                          : '2px solid rgba(255,255,255,0.12)',
+                    }}
+                  >
+                    {rung ? (
+                      <span style={{ color: '#4ade80', fontSize: '11px' }}>✓</span>
+                    ) : isNext ? (
+                      <span
+                        style={{
+                          display: 'block',
+                          width: '7px',
+                          height: '7px',
+                          borderRadius: '50%',
+                          background: '#818cf8',
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          display: 'block',
+                          width: '7px',
+                          height: '7px',
+                          borderRadius: '50%',
+                          background: led,
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Time */}
+                  <div style={{ width: '46px', flexShrink: 0 }}>
+                    <span
+                      style={{
+                        fontSize: '14px',
+                        fontWeight: 700,
+                        fontFamily: 'monospace',
+                        letterSpacing: '-0.5px',
+                        color: isNext ? '#a5b4fc' : rung ? 'rgba(255,255,255,0.28)' : '#e2e8f0',
+                      }}
+                    >
+                      {s.ring_time}
+                    </span>
+                  </div>
+
+                  {/* Name + badges */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        flexWrap: 'wrap',
+                        marginBottom: '5px',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: '15px',
+                          fontWeight: 700,
+                          color: isNext ? '#e0e7ff' : rung ? 'rgba(255,255,255,0.3)' : '#f8fafc',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: '180px',
+                        }}
+                      >
+                        {s.name}
+                      </span>
+                      {/* Situation badge */}
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          padding: '2px 8px',
+                          borderRadius: '20px',
+                          background: sit.bg,
+                          border: `1px solid ${sit.border}`,
+                          color: sit.text,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {SIT_ICONS[s.situation_type]} {s.situation_type}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <PatternBadge value={s.pattern} />
+                      {s.lcd_line1 && (
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            fontFamily: 'monospace',
+                            color: 'rgba(255,255,255,0.22)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            maxWidth: '120px',
+                          }}
+                        >
+                          {s.lcd_line1}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Status chips */}
+                  {rung && (
+                    <span
+                      style={{
+                        flexShrink: 0,
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                        color: '#4ade80',
+                        background: 'rgba(34,197,94,0.1)',
+                        border: '1px solid rgba(34,197,94,0.25)',
+                        padding: '3px 9px',
+                        borderRadius: '20px',
+                      }}
+                    >
+                      ✓ Rang
+                    </span>
+                  )}
+                  {isNext && !rung && (
+                    <span
+                      style={{
+                        flexShrink: 0,
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                        color: '#818cf8',
+                        background: 'rgba(99,102,241,0.12)',
+                        border: '1px solid rgba(99,102,241,0.3)',
+                        padding: '3px 9px',
+                        borderRadius: '20px',
+                      }}
+                    >
+                      Next ›
+                    </span>
+                  )}
+
+                  {/* Test button */}
+                  {canEdit && (
+                    <button
+                      onClick={() => testBell(s)}
+                      disabled={!!rs}
+                      style={{
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '7px 13px',
+                        borderRadius: '9px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        fontFamily: 'inherit',
+                        cursor: rs ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.15s',
+                        background:
+                          rs === 'done'
+                            ? 'rgba(34,197,94,0.15)'
+                            : rs === 'loading'
+                              ? 'rgba(255,255,255,0.04)'
+                              : 'rgba(99,102,241,0.18)',
+                        border:
+                          rs === 'done'
+                            ? '1px solid rgba(34,197,94,0.35)'
+                            : rs === 'loading'
+                              ? '1px solid rgba(255,255,255,0.08)'
+                              : '1px solid rgba(99,102,241,0.4)',
+                        color:
+                          rs === 'done'
+                            ? '#4ade80'
+                            : rs === 'loading'
+                              ? 'rgba(255,255,255,0.3)'
+                              : '#a5b4fc',
+                      }}
+                    >
+                      {rs === 'done' ? '✓ Done' : rs === 'loading' ? '...' : '🔔 Test'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
